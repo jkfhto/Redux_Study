@@ -5,11 +5,12 @@ function bindActionCreator(actionCreator, dispatch) {
     }
 }
 
+//一个辅助方法，能够让我们以方法的形式来派发action
 export default function bindActionCreators(actionCreators, dispatch) {
     
     //处理函数
     if (typeof actionCreators ==='function'){
-        bindActionCreator(actionCreators, dispatch);
+        return bindActionCreator(actionCreators, dispatch);
     }
 
     if (typeof actionCreators !== 'object' || actionCreators === null) {
@@ -26,11 +27,11 @@ export default function bindActionCreators(actionCreators, dispatch) {
     for (const key in actionCreators) {
         const actionCreator = actionCreators[key]
         if (typeof actionCreator === 'function') {
-            //绑定属性为bindActionCreator返回的函数
+            //绑定属性：为bindActionCreator返回的函数
             boundActionCreators[key] = bindActionCreator(actionCreator, dispatch)
         }
     }
-    //返回绑定action后的对象
+    //返回绑定actionCreators后的对象
     return boundActionCreators
     
 }

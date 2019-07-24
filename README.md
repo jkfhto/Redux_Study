@@ -1,6 +1,6 @@
 # Redux_Study
 
-Redux 学习
+Redux 学习总结
 
 ## 需要解决的问题
 
@@ -101,3 +101,119 @@ Redux 学习
           return new_state;
         };
   ```
+
+## Redux middleware
+
+![中间件](./resources/middleware.png)
+
+- 不使用middleware时，在dispatch(action)时会执行Reducer，并根据action的type更新返回相应的state。
+- 而在使用middleware时，简言之，middleware会将我们当前的action做相应的处理，随后再交付Reducer执行
+- 通过重写dispatch方法，在派发action之前或之后添加逻辑（AOP）。 你可以利用 Redux middleware 来进行日志记录、创建崩溃报告、调用异步接口或者路由等等。每一个 middleware 处理一个相对独立的业务需求，通过串联不同的 middleware，实现变化多样的的功能。
+
+### applyMiddleware分析
+
+  ```script
+  import { createStore } from 'redux';
+  import reducer from './reducers';
+  const logger = function ({ getState, dispatch }) {
+      return function (next) {
+          return function (action) {
+              console.log(`旧状态：${JSON.stringify(getState())}`);
+              next(action);
+              console.log(`新状态：${JSON.stringify(getState())}`);
+          }
+      }
+  }
+  const thunk = function ({ getState, dispatch }) {
+      return function (next) {
+          return function (action) {
+              if (typeof action === 'function') {
+                  action(dispatch);
+              } else {
+                  console.log(next)
+                  next(action)
+              }
+          }
+      }
+  }
+  function applyMiddleware(...middlewares) {
+      return function (createStore) {
+          return function (...args) {
+              let store = createStore(...args);
+              let dispatch;
+              let middlewareAPI = {
+                  getState: store.getState,
+                  dispatch: (...args) => dispatch(...args)
+              };
+              const chain = middlewares.map(middleware => middleware(middlewareAPI));
+              dispatch = compose(...chain)(store.dispatch);
+              return {
+                  ...store,
+                  dispatch
+              };
+          }
+      }
+  }
+  function compose(...funcs) {
+      if (funcs.length === 0) {
+          return arg => arg
+      }
+      if (funcs.length === 1) {
+          return funcs[0]
+      }
+      return funcs.reduce((a, b) => (...args) => a(b(...args)))
+  }
+
+  let store = applyMiddleware(thunk, logger)(createStore)(reducer);
+  // let store = createStore(reducer, applyMiddleware(thunk, logger));
+  export default store;
+
+  ```
+
+- 1、依次执行middleware：将middleware执行后返回的函数合并到一个chain数组，这里我们有必要看看标准middleware的定义格式，如下
+  - ```const chain = middlewares.map(middleware => middleware(middlewareAPI))```
+  
+    ```script
+    export default ({ dispatch, getState }) => next => action => {}
+
+    // 即
+    function ({ dispatch, getState }) {
+        return function(next) {
+            return function (action) {
+                return {}
+            }
+        }
+    }
+    ```
+
+    那么此时合并的chain结构如下
+
+    ```script
+    [    ...,
+        function(next) {
+            return function (action) {
+                return {}
+            }
+        }
+    ]
+    ```
+
+- 2、改变dispatch指向：compose函数，实际就是一个柯里化函数，即将所有的middleware合并成一个middleware，并在最后一个middleware中传入当前的dispatch
+  - ```dispatch = compose(...chain)(store.dispatch)``` 返回重写的dispatch
+    ![compose](./resources/middleware2.png)
+
+- 3、触发action，执行过程如下
+
+    ```script
+    asyncAdd(){
+        //在redux中派发的动作只能是纯对象，并不能函数 store.dispatch
+       return function(dispatch){
+           setTimeout(() => {
+                dispatch({type:types.ADD});
+           }, 1000);
+       }
+    },
+    ```
+
+    执行重写的dispatch函数，当前action是一个函数，执行action(dispatch)。执行setTimeout，1秒钟之后执行dispatch({type:types.ADD});当前dispatch指向重写的dispatch。递归指向重写的dispatch函数，当前action是一个对象，执行next(action)，当前next指向红框的函数，最终打印状态数据，派发actions触发状态更新
+  

@@ -1,4 +1,9 @@
-export default function createStore(reducer) {
+export default function createStore(reducer, enhancer) {
+    //处理middleware 中间件
+    //enhancer：applyMiddleware(...middleware)的执行结果
+    if (enhancer) {
+        return enhancer(createStore)(reducer)
+    }
     let state;
     let listeners = [];//事件订阅
 
